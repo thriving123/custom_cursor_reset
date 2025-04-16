@@ -1,70 +1,59 @@
 name: Release
-
 on:
-  push:
-    tags:
-      - 'v*' # 匹配以 v 开头的标签，如 v1.0.0
+    push:
+        tags:
+            - 'v*'
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        platform: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    release:
+        permissions:
+            contents: write
+        strategy:
+            fail-fast: false
+            matrix:
+                platform: [macos-latest, ubuntu-20.04, windows-latest]
+        runs-on: ${{ matrix.platform }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm' # 如果你使用 pnpm，改成 npm 或 yarn 如果你用它们
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: |
-          pnpm install # 或 npm install / yarn install
-          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-          # 仅 Linux 需要上面这行，但保留在这里以防万一
+            - name: Install dependencies (ubuntu only)
+              if: matrix.platform == 'ubuntu-20.04'
+              # You can remove libayatana-appindicator3-dev if you don't use the system tray feature.
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: Install Tauri CLI
-        run: pnpm add -g @tauri-apps/cli # 或 npm install -g / yarn global add
+            - name: Rust setup
+              uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Tauri app
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm tauri build
+            - name: Rust cache
+              uses: swatinem/rust-cache@v2
+              with:
+                  workspaces: './src-tauri -> target'
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ runner.os }}-build
-          path: src-tauri/target/release/bundle/
+            - name: Sync node version and setup cache
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+            - name: Install PNPM
+              run: npm i -g pnpm
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            Automated release for version ${{ github.ref_name }}
-            Built artifacts:
-            - Windows: .exe installer
-            - macOS: .dmg installer
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/windows-latest-build/*.exe
-            artifacts/windows-latest-build/*.msi
-            artifacts/macos-latest-build/*.dmg
-            artifacts/macos-latest-build/*.app.tar.gz
-            artifacts/macos-latest-build/*.app.zip
+            - name: Install frontend dependencies
+              # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
+              run: pnpm install # Change this to npm, yarn or pnpm.
+
+            - name: Build the app
+              uses: tauri-apps/tauri-action@v0
+
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tagName: ${{ github.ref_name }} # This only works if your workflow triggers on new tags.
+                  releaseName: 'LiveBox v__VERSION__' # tauri-action replaces \_\_VERSION\_\_ with the app version.
+                  releaseBody: 'See the assets to download and install this version.'
+                  releaseDraft: false
+                  prerelease: false
+                  publish: true
