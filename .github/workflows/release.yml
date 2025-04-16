@@ -49,20 +49,32 @@ jobs:
                   releaseBody: 'See the assets to download and install this version.'
                   releaseDraft: false
                   prerelease: false
-                  publish: false
+                  # 不同平台使用不同构建参数
+                  args: ${{ matrix.platform == 'windows-latest' && '--bundles none' || '' }}
             
-            - name: Upload Windows Binaries
+            - name: Copy Windows Binary
               if: matrix.platform == 'windows-latest'
-              uses: actions/upload-artifact@v4
+              run: |
+                mkdir -p release
+                cp src-tauri/target/release/cursor-reset.exe release/cursor-reset_${{ github.ref_name }}.exe
+            
+            - name: Upload Windows Binary
+              if: matrix.platform == 'windows-latest'
+              uses: softprops/action-gh-release@v1
               with:
-                  name: windows-binaries
-                  path: src-tauri/target/release/cursor-reset.exe
-            - name: Upload MacOS Binaries
+                files: release/cursor-reset_${{ github.ref_name }}.exe
+            
+            - name: Copy MacOS DMG
               if: matrix.platform == 'macos-latest'
-              uses: actions/upload-artifact@v4
+              run: |
+                mkdir -p release
+                find src-tauri/target/release/bundle/dmg -name "*.dmg" -exec cp {} release/ \;
+            
+            - name: Upload MacOS DMG
+              if: matrix.platform == 'macos-latest'
+              uses: softprops/action-gh-release@v1
               with:
-                  name: macos-binaries
-                  path: src-tauri/target/release/bundle/
+                files: release/*.dmg
 
 
 
