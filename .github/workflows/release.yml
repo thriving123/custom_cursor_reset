@@ -44,25 +44,21 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  tagName: ${{ github.ref_name }} # This only works if your workflow triggers on new tags.
-                  releaseName: 'Custom Cursor Reset v__VERSION__' # tauri-action replaces \_\_VERSION\_\_ with the app version.
-                  releaseBody: 'See the assets to download and install this version.'
-                  releaseDraft: false
-                  prerelease: false
+  
                   # 不同平台使用不同构建参数
-                  args: ${{ matrix.platform == 'windows-latest' && '--bundles msi' || '' }}
+                  args: ${{ matrix.args }}
             
             - name: Copy Windows Binary
               if: matrix.platform == 'windows-latest'
               run: |
                 mkdir -p release
-                cp src-tauri/target/release/cursor-reset.exe release/cursor-reset_${{ github.ref }}.exe
+                cp src-tauri/target/release/cursor-reset.exe ./release/cursor-reset_${{ github.ref_name }}.exe
             
             - name: Upload Windows Binary
               if: matrix.platform == 'windows-latest'
               uses: softprops/action-gh-release@v1
               with:
-                files: release/cursor-reset_${{ github.ref }}.exe
+                files: ./release/cursor-reset_${{ github.ref_name }}.exe
             
             - name: Copy MacOS DMG
               if: matrix.platform == 'macos-latest'
