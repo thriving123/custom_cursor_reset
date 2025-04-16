@@ -127,10 +127,10 @@ pub fn read_device_info(path: String) -> CursorDeviceInfo {
 }
 
 fn generate_hex_str(size:i32)->String{
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut result = String::with_capacity(size as usize);
     for _ in 0..size {
-        let random_digit: u8 = rng.gen_range(0..16);
+        let random_digit: u8 = rng.random_range(0..16);
         let hex_char = format!("{:x}", random_digit);
         result.push_str(&hex_char);
     }
