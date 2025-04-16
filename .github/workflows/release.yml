@@ -50,19 +50,19 @@ jobs:
                   releaseDraft: false
                   prerelease: false
                   # 不同平台使用不同构建参数
-                  args: ${{ matrix.platform == 'windows-latest' && '--bundles none' || '' }}
+                  args: ${{ matrix.platform == 'windows-latest' && '--bundles msi' || '' }}
             
             - name: Copy Windows Binary
               if: matrix.platform == 'windows-latest'
               run: |
                 mkdir -p release
-                cp src-tauri/target/release/cursor-reset.exe release/cursor-reset_${{ github.ref_name }}.exe
+                cp src-tauri/target/release/cursor-reset.exe release/cursor-reset_${{ github.ref }}.exe
             
             - name: Upload Windows Binary
               if: matrix.platform == 'windows-latest'
               uses: softprops/action-gh-release@v1
               with:
-                files: release/cursor-reset_${{ github.ref_name }}.exe
+                files: release/cursor-reset_${{ github.ref }}.exe
             
             - name: Copy MacOS DMG
               if: matrix.platform == 'macos-latest'
