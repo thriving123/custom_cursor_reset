@@ -83,9 +83,8 @@ async fn get_cursor_install_info() -> CursorInstallInfo {
                     break;
                 }
             }
-            
             // 如果没找到，尝试使用 mdfind 命令查找
-            if path.is_empty() {
+            if install_info.install_path.is_empty() {
                 if let Ok(output) = Command::new("mdfind").args(["kMDItemCFBundleIdentifier == 'com.cursor.Cursor'"]).
                     output() {
                     if let Ok(stdout) = String::from_utf8(output.stdout) {
