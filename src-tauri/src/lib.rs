@@ -70,7 +70,6 @@ async fn get_cursor_install_info() -> CursorInstallInfo {
         
         #[cfg(target_os = "macos")]
         {
-
             // macOS 上查找 Cursor 应用
             let applications = vec![
                 "/Applications/Cursor.app".to_string(),
@@ -95,6 +94,135 @@ async fn get_cursor_install_info() -> CursorInstallInfo {
                     }
                 }
             }
+            
+            // 获取版本信息
+            if !install_info.install_path.is_empty() {
+                // 从Info.plist获取版本信息
+                let info_plist_path = format!("{}/Contents/Info.plist", install_info.install_path);
+                if std::path::Path::new(&info_plist_path).exists() {
+                    // 使用defaults命令读取版本信息
+                    if let Ok(output) = Command::new("defaults").args(["read", &info_plist_path, "CFBundleShortVersionString"]).output() {
+                        if let Ok(version) = String::from_utf8(output.stdout) {
+                            install_info.install_version = version.trim().to_string();
+                        }
+                    }
+                    
+                    // 尝试多种方法获取Cursor的语言和用户信息
+                    let home_dir = std::env::var("HOME").unwrap_or_default();
+                    let cursor_config_dir = format!("{}/Library/Application Support/Cursor", home_dir);
+                    
+                    // 1. 尝试从Preferences文件获取语言设置
+                    let preferences_path = format!("{}/Preferences", cursor_config_dir);
+                    if std::path::Path::new(&preferences_path).exists() {
+                        if let Ok(output) = Command::new("cat").arg(&preferences_path).output() {
+                            if let Ok(prefs_content) = String::from_utf8(output.stdout) {
+                                if let Some(lang_pos) = prefs_content.find("dictionaries\":") {
+                                    let lang_start = lang_pos + 14; // dictionaries":[" 的长度
+                                    if let Some(lang_end) = prefs_content[lang_start..].find("]") {
+                                        let language = &prefs_content[lang_start..lang_start + lang_end];
+                                        // 处理引号和逗号
+                                        let cleaned_lang = language.replace('"', "").replace('[', "").trim().to_string();
+                                        if !cleaned_lang.is_empty() {
+                                            install_info.install_language = cleaned_lang;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 2. 尝试从Git日志中获取用户名和邮箱
+                    let logs_dir = format!("{}/logs", cursor_config_dir);
+                    if std::path::Path::new(&logs_dir).exists() {
+                        // 使用grep命令从日志中查找用户名和邮箱
+                        if let Ok(output) = Command::new("grep").args(["-r", "Stored git author name", &logs_dir]).output() {
+                            if let Ok(log_content) = String::from_utf8(output.stdout) {
+                                if !log_content.is_empty() {
+                                    // 从日志中提取用户名和邮箱
+                                    if let Some(author_pos) = log_content.find("global state: ") {
+                                        let author_start = author_pos + 14; // "global state: " 的长度
+                                        let author_info = &log_content[author_start..];
+                                        
+                                        // 如果包含用户名和邮箱的格式如"李良安 <1120777912@qq.com>"
+                                        if let Some(email_start) = author_info.find('<') {
+                                            let username = author_info[..email_start].trim();
+                                            if let Some(email_end) = author_info[email_start..].find('>') {
+                                                let email = &author_info[email_start+1..email_start+email_end];
+                                                if !username.is_empty() && !email.is_empty() {
+                                                    // 同时显示用户名和邮箱，格式为"用户名(邮箱)"
+                                                    install_info.install_user = format!("{} ({})", username, email);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 3. 如果从Git日志中没有获取到用户名，尝试从sentry/scope_v3.json获取邮箱
+                    if install_info.install_user.is_empty() {
+                        let sentry_path = format!("{}/sentry/scope_v3.json", cursor_config_dir);
+                        if std::path::Path::new(&sentry_path).exists() {
+                            if let Ok(output) = Command::new("cat").arg(&sentry_path).output() {
+                                if let Ok(sentry_content) = String::from_utf8(output.stdout) {
+                                    // 尝试获取用户邮箱
+                                    if let Some(email_pos) = sentry_content.find("\"email\":") {
+                                        let email_start = email_pos + 9; // "email":" 的长度
+                                        if let Some(email_end) = sentry_content[email_start..].find("\"") {
+                                            let email = &sentry_content[email_start..email_start + email_end];
+                                            if !email.is_empty() {
+                                                install_info.install_user = format!("用户({})", email);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 3. 尝试从languagepacks.json获取语言设置
+                    if install_info.install_language.is_empty() {
+                        let lang_packs_path = format!("{}/languagepacks.json", cursor_config_dir);
+                        if std::path::Path::new(&lang_packs_path).exists() {
+                            if let Ok(output) = Command::new("cat").arg(&lang_packs_path).output() {
+                                if let Ok(lang_content) = String::from_utf8(output.stdout) {
+                                    // 如果文件包含中文语言包
+                                    if lang_content.contains("zh-cn") {
+                                        install_info.install_language = "zh-cn".to_string();
+                                    } else if lang_content.contains("en") {
+                                        install_info.install_language = "en".to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 4. 检查中文语言包目录是否存在
+                    if install_info.install_language.is_empty() {
+                        let zh_lang_dir = format!("{}/clp/6d6cd612ec0ae3cd32737a6f6b7ad966.zh-cn", cursor_config_dir);
+                        if std::path::Path::new(&zh_lang_dir).exists() {
+                            install_info.install_language = "zh-cn".to_string();
+                        }
+                    }
+                    
+                    // 5. 如果还是没有获取到用户信息，尝试使用应用程序路径的用户名部分
+                    if install_info.install_user.is_empty() && !install_info.install_path.is_empty() {
+                        if install_info.install_path.contains("/Users/") {
+                            if let Some(user_start) = install_info.install_path.find("/Users/") {
+                                let user_path = &install_info.install_path[user_start + 7..];
+                                if let Some(user_end) = user_path.find('/') {
+                                    let username = &user_path[..user_end];
+                                    if !username.is_empty() {
+                                        install_info.install_user = username.to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
             return install_info;
         }
 
