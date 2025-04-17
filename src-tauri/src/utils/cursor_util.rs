@@ -8,7 +8,7 @@ const PACKAGE_JSON_ARR: [&str; 3] = [
 #[cfg(target_os = "macos")]
 const PACKAGE_JSON_ARR: [&str; 3] = [
     "Library/Application Support/Cursor/User/globalStorage/storage.json",
-    "Applications/Cursor.app/Contents/Resources/app/package.json",
+    "Applications/Cursor.app/Contents/Resources/storage.json",
     "Library/Application Support/Cursor/storage.json",
 ];
 
@@ -20,6 +20,8 @@ use serde_json::Value;
 use crate::model::cursor_model::CursorDeviceInfo;
 use uuid::Uuid;
 use rand::Rng;
+#[cfg(target_os = "macos")]
+use regex::Regex;
 
 // 返回当前用户根目录
 fn get_user_home_dir() -> String {
@@ -31,7 +33,7 @@ fn get_user_home_dir() -> String {
     }
   }
   
-  #[cfg(not(target_os = "windows"))]
+  #[cfg(target_os = "macos")]
   {
     match env::var_os("HOME") {
       Some(home) => PathBuf::from(home).to_string_lossy().to_string(),
@@ -50,29 +52,13 @@ pub fn get_package_path() -> String {
     #[cfg(target_os = "windows")]
     let full_path = format!("{}\\{}", home_dir, item);
     
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     let full_path = format!("{}/{}", home_dir, item);
     
     if std::path::Path::new(&full_path).exists() {
       return full_path;
     }
   }
-  
-  // 对于 macOS，尝试直接在系统级别查找
-  #[cfg(target_os = "macos")]
-  {
-    let system_paths = [
-      "/Applications/Cursor.app/Contents/Resources/app/package.json",
-      "/Applications/Cursor.app/Contents/Resources/storage.json"
-    ];
-    
-    for path in system_paths.iter() {
-      if std::path::Path::new(path).exists() {
-        return path.to_string();
-      }
-    }
-  }
-  
   "".to_string()
 }
 
@@ -176,5 +162,47 @@ pub fn reset_device_info(path:String) -> CursorDeviceInfo {
 
     let json_str = serde_json::to_string_pretty(&json_map).unwrap();
     file.write_all(json_str.as_bytes()).unwrap();
+    // 更新main.js
+    #[cfg(target_os = "macos")]
+    {
+      let main_js_path = "/Applications/Cursor.app/Contents/Resources/app/out/main.js";
+      update_main_js(main_js_path);
+    }
     info
+}
+
+#[cfg(target_os = "macos")]
+fn update_main_js(path:String) {
+  //读取文件为一个String引用
+  let file = File::open(&path);
+  if let Ok(mut file) = file {
+    // 备份文件（如果备份文件不存在）
+    let backup_path = format!("{}.backup", path);
+    if !std::path::Path::new(&backup_path).exists() {
+      let mut backup_file = std::fs::OpenOptions::new()
+          .write(true)
+          .create(true)
+          .open(backup_path)
+          .unwrap();
+    }
+    let mut contents = String::new();
+    if file.read_to_string(&mut contents).is_ok() {
+      // 正则替换
+        let re = Regex::new(r"ioreg -rd1 -c IOPlatformExpertDevice").unwrap();
+        
+        // 替换为生成 UUID 的命令
+        let replacement = r#"UUID=$(uuidgen | tr '[:upper:]' '[:lower:]');echo "IOPlatformUUID = "$UUID";"#;
+        
+        // 执行替换
+        let new_contents = re.replace_all(&contents, replacement).to_string();
+        // 写回文件
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .unwrap();
+        file.write_all(new_contents.as_bytes()).unwrap();
+    }
+  }
+
 }
