@@ -44,7 +44,6 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-  
                   # 不同平台使用不同构建参数
                   args: ${{ matrix.args }}
             
@@ -64,7 +63,7 @@ jobs:
               if: matrix.platform == 'macos-latest'
               run: |
                 mkdir -p release
-                find src-tauri/target/release/bundle/dmg -name "*.dmg" -exec cp {} release/cursor-reset_${{ github.ref_name }}.dmg \;
+                find src-tauri/target/release/bundle/dmg -name "*.dmg" -exec cp {} release/cursor-reset_${{ github.ref_name }}_aarch64.dmg \;
             
             - name: Upload MacOS DMG
               if: matrix.platform == 'macos-latest'
