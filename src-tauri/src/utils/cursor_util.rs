@@ -143,18 +143,36 @@ pub fn reset_device_info(path:String) -> CursorDeviceInfo {
     let sqm_id = format!("{{{}}}", Uuid::new_v4().to_string().to_uppercase());
     let dev_device_id = Uuid::new_v4().to_string();
     let info = CursorDeviceInfo::new(mac_machine_id, machine_id, sqm_id, dev_device_id);
-    // 写到文件
+
+    // 先读取文件内容
+    let mut json_map = serde_json::Map::new();
+    let file = File::open(&path);
+    if let Ok(mut file) = file {
+        let mut contents = String::new();
+        if file.read_to_string(&mut contents).is_ok() {
+            if let Ok(json) = serde_json::from_str::<Value>(&contents) {
+                if let Some(obj) = json.as_object() {
+                    // 复制原有json内容
+                    for (key, value) in obj {
+                        json_map.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // 更新需要修改的键值
+    json_map.insert("telemetry.macMachineId".to_string(), serde_json::Value::String(info.mac_machine_id.clone()));
+    json_map.insert("telemetry.machineId".to_string(), serde_json::Value::String(info.machine_id.clone()));
+    json_map.insert("telemetry.sqmId".to_string(), serde_json::Value::String(info.sqm_id.clone()));
+    json_map.insert("telemetry.devDeviceId".to_string(), serde_json::Value::String(info.dev_device_id.clone()));
+
+    // 写回文件
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .truncate(true)
         .open(path)
         .unwrap();
-
-    let mut json_map = serde_json::Map::new();
-    json_map.insert("telemetry.macMachineId".to_string(), serde_json::Value::String(info.mac_machine_id.clone()));
-    json_map.insert("telemetry.machineId".to_string(), serde_json::Value::String(info.machine_id.clone()));
-    json_map.insert("telemetry.sqmId".to_string(), serde_json::Value::String(info.sqm_id.clone()));
-    json_map.insert("telemetry.devDeviceId".to_string(), serde_json::Value::String(info.dev_device_id.clone()));
 
     let json_str = serde_json::to_string_pretty(&json_map).unwrap();
     file.write_all(json_str.as_bytes()).unwrap();
