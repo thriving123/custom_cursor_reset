@@ -177,7 +177,7 @@ pub fn reset_device_info(path: String) -> CursorDeviceInfo {
     // 更新main.js
     #[cfg(target_os = "macos")]
     {
-        let main_js_path = "/Applications/Cursor.app/Contents/Resources/app/out/main.js";
+        let main_js_path = "/Applications/Cursor.app/Contents/Resources/app/out/main.js".to_string();
         update_main_js(main_js_path);
     }
     info
